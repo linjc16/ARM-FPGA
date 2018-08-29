@@ -1,0 +1,9 @@
+22:03:45 **** Incremental Build of configuration Nios II for project play ****
+make all 
+Info: Building ../play_bsp/
+C:/altera/15.0/nios2eds/bin/gnu/H-x86_64-mingw32/bin/make --no-print-directory -C ../play_bsp/
+[BSP build complete]
+[play build complete]
+
+22:03:46 Build Finished (took 810ms)
+

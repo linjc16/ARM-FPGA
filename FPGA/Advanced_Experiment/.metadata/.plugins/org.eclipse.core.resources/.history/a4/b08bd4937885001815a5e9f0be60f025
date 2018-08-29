@@ -1,0 +1,258 @@
+/*
+ * "Hello World" example.
+ *
+ * This example prints 'Hello from Nios II' to the STDOUT stream. It runs on
+ * the Nios II 'standard', 'full_featured', 'fast', and 'low_cost' example
+ * designs. It runs with or without the MicroC/OS-II RTOS and requires a STDOUT
+ * device in your system's hardware.
+ * The memory footprint of this hosted application is ~69 kbytes by default
+ * using the standard reference design.
+ *
+ * For a reduced footprint version of this template, and an explanation of how
+ * to reduce the memory footprint for a given application, see the
+ * "small_hello_world" template.
+ *
+ */
+
+#include <stdio.h>
+#include "LCD1602_Qsys.h"
+#include "system.h"
+#include <string.h>
+#include "sys/alt_irq.h"
+
+unsigned int *pUser_IR=IR1498_0_BASE;
+unsigned int IR_Data;
+
+unsigned char Data_Ready;
+
+//LCD显示
+unsigned char LCD_Welcome[16] = {"YY Music"};
+unsigned char Song_0[] = {"Baby "};
+unsigned char Song_1[] = {"Closer "};
+unsigned char Song_2[] = {"Faded "};
+unsigned char Song_3[] = {"After the Afterparty   "};
+unsigned char Song_4[] = {"Keeping Your Head Up   "};
+unsigned char Song_5[] = {"Kill 'Em With Kindness   "};
+unsigned char Song_6[] = {"Stitches "};
+unsigned char Song_7[] = {"Sensual "};
+unsigned char Song_8[] = {"Still Falling For You   "};
+unsigned char Song_9[] = {"Cake By The Ocean   "};
+unsigned char Song_10[] = {"Blank Space   "};
+unsigned char Song_11[] = {"Don't Wanna Know   "};
+unsigned char Song_12[] = {"Glow   "};
+
+unsigned char space[500] = "                                                         ";
+unsigned char str[500] = "                ";
+
+int str_len = 16;
+
+
+//状态变量
+int Power = 0;
+//字符串移位函数
+void RightLoopMove(unsigned char *pStr, int steps)
+{
+    unsigned char arr[100] = { 0 };
+    int n = strlen(pStr) - steps;
+    strcpy(arr, pStr + n);
+    strcpy(arr + steps, pStr);
+    *(arr + strlen(pStr)) = '\0';
+    strcpy(pStr, arr);
+}
+
+void LeftLoopMove(unsigned char *pStr , int steps)
+{
+	unsigned char arr[100] = {0};
+	pStr[str_len] = '\0';
+	strcpy(arr,pStr+steps);
+	strcpy(arr + str_len - steps , pStr);
+	arr[str_len] = '\0 ';
+	strcpy(pStr , arr);
+}
+void IR_Irq_Process()
+{
+	Data_Ready=1;
+	IR_Data=*(pUser_IR);
+}
+
+int IR_Irq_Init()
+{
+    int States;
+    States=alt_ic_isr_register(
+    		IR1498_0_IRQ_INTERRUPT_CONTROLLER_ID,   // 中断控制器标号，从system.h复制
+    		IR1498_0_IRQ,                           // 硬件中断号，从system.h复制
+    		IR_Irq_Process,                          // 中断服务子函数
+			NULL,                                    // 指向与设备驱动实例相关的数据结构体
+			0
+						);
+    return States;
+}
+void delay()
+{
+    int i= 10000;
+    while(i--);
+}
+void Display(unsigned char *Song)
+{
+	if(Power == 1)
+	{
+	strcpy(str,space);
+	strcpy(str,Song);
+	str_len = strlen(Song);
+	LCD_Disp(2,0,"                ",16);
+	delay();
+	LCD_Disp(2,0,Song,strlen(Song));
+	}
+}
+
+int main()
+{
+  int States;
+  unsigned char Key_Code;
+  unsigned char Last_Key_Code = Key_Code;
+  States=IR_Irq_Init();
+
+  //Song定义
+  unsigned char **Song[50];
+  Song[0] = Song_0;
+  Song[1] = Song_1;
+  Song[2] = Song_2;
+  Song[3] = Song_3;
+  Song[4] = Song_4;
+  Song[5] = Song_5;
+  Song[6] = Song_6;
+  Song[7] = Song_7;
+  Song[8] = Song_8;
+  Song[9] = Song_9;
+  Song[10] = Song_10;
+  Song[11] = Song_11;
+  Song[12] = Song_12;
+  int cnt = 0;
+  while(1)
+  {
+	  delay();
+	if(Power == 1)
+	{
+
+	  if(!cnt)
+	{
+	  if(str_len > 16)
+	  {
+		  LeftLoopMove(str,1);
+		  LCD_Disp(2,0,"                ",16);
+		  delay();
+		  LCD_Disp(2,0,str,str_len);
+		  delay();
+		  LCD_Disp(1,0,LCD_Welcome,16);
+	  }
+	  else
+	  {
+		  LCD_Disp(2,0,"                ",16);
+		  delay();
+		  LCD_Disp(2,0,str,str_len);
+		  delay();
+		  LCD_Disp(1,0,LCD_Welcome,16);
+	  }
+	}
+	  cnt = (cnt + 1)%35;
+	}
+	  if(Data_Ready == 1)
+	  {
+		  Data_Ready = 0;
+		  Key_Code = (IR_Data >> 16) & 0xff;
+		  switch(Key_Code)
+		  {
+		  case 0x01:
+		  {
+			  Display(Song[1]);
+			  break;
+		  }
+		  case 0x02:
+		  {
+			  Display(Song[2]);
+			  break;
+		  }
+		  case 0x03:
+		  {
+			  Display(Song[3]);
+			  break;
+		  }
+		  case 0x04:
+		  {
+			  Display(Song[4]);
+			  break;
+		  }
+		  case 0x05:
+		  {
+			  Display(Song[5]);
+			  break;
+		  }
+		  case 0x06:
+		  {
+			  Display(Song[6]);
+			  break;
+		  }
+		  case 0x07:
+		  {
+			  Display(Song[7]);
+			  break;
+		  }
+		  case 0x08:
+		  {
+			  Display(Song[8]);
+			  break;
+		  }
+		  case 0x09:
+		  {
+			  Display(Song[9]);
+			  break;
+		  }
+		  case 0x00:
+		  {
+			  LCD_Disp(2,0,"                ",16);
+			  LCD_Disp(2,0,"10",2);
+			  break;
+		  }
+		  case 0x11:
+		  {
+			  LCD_Disp(2,0,"                ",16);
+			  LCD_Disp(2,0,"11",2);
+			  break;
+		  }
+		  case 0x12:
+		  {
+			  if(Power == 1)
+			  {
+				  LCD_Disp(1,0,"                ",16);
+				  delay();
+				  LCD_Disp(2,0,"                ",16);
+			  }
+			  else
+			  {
+				  LCD_Disp(1,0,LCD_Welcome,8);
+			  }
+			  Power = !Power;
+
+			  break;
+		  }
+		  case 0x17:
+		  {
+			  LCD_Disp(2,0,"                ",16);
+			  LCD_Disp(2,0,"17",2);
+			  break;
+		  }
+		  default:
+		  {
+			  LCD_Disp(2,0,"                ",16);
+			  LCD_Disp(2,0,"CNM",3);
+			  break;
+		  }
+		  }
+
+	}
+	 delay();
+
+  }
+
+  return 0;
+}

@@ -1,0 +1,10 @@
+module SEG7_driver(input csi_clk,input csi_rst_n,input avs_cs,input [4:0]avs_add,input avs_rd,input avs_wr,input [31:0]avs_wrd,output reg [31:0]avs_rdd,output reg [63:0]coe_SEG7);
+	always@(posedge csi_clk or negedge csi_rst_n) begin
+		if (!csi_rst_n) begin
+			coe_SEG7<=64'hffffffffffffffff;
+		end
+		else begin
+			if (cs)
+		end
+	end
+endmodule

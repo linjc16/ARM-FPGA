@@ -1,0 +1,441 @@
+/*
+ * "Hello World" example.
+ *
+ * This example prints 'Hello from Nios II' to the STDOUT stream. It runs on
+ * the Nios II 'standard', 'full_featured', 'fast', and 'low_cost' example
+ * designs. It runs with or without the MicroC/OS-II RTOS and requires a STDOUT
+ * device in your system's hardware.
+ * The memory footprint of this hosted application is ~69 kbytes by default
+ * using the standard reference design.
+ *
+ * For a reduced footprint version of this template, and an explanation of how
+ * to reduce the memory footprint for a given application, see the
+ * "small_hello_world" template.
+ *
+ */
+
+#include <stdio.h>
+#include "LCD1602_Qsys.h"
+#include "system.h"
+#include <string.h>
+#include "sys/alt_irq.h"
+#include <time.h>
+unsigned int *pUser_IR=IR1498_0_BASE;
+unsigned int IR_Data;
+unsigned int *pUser_SEG7 = SEG7_DEMO_0_BASE;
+unsigned char Data_Ready;
+
+//LCD显示
+//界面
+unsigned char LCD_Welcome[16] = {"YY Music"};
+//播放状态
+unsigned char LCD_Playing[] = {"YMusic Playing"};
+unsigned char LCD_Pause[] = {"YMusic Pause"};
+//Song
+unsigned char Song_0[] = {"  Baby "};
+unsigned char Song_1[] = {"  Closer "};
+unsigned char Song_2[] = {"  Faded "};
+unsigned char Song_3[] = {"  After the Afterparty   "};
+unsigned char Song_4[] = {"  Keeping Your Head Up   "};
+unsigned char Song_5[] = {"  Kill 'Em With Kindness   "};
+unsigned char Song_6[] = {"  Stitches "};
+unsigned char Song_7[] = {"  Sensual "};
+unsigned char Song_8[] = {"  Still Falling For You   "};
+unsigned char Song_9[] = {"  Cake By The Ocean   "};
+unsigned char Song_10[] = {"  Blank Space   "};
+unsigned char Song_11[] = {"  Don't Wanna Know   "};
+unsigned char Song_12[] = {"  Glow   "};
+
+unsigned char space[500] = "                                                         ";
+unsigned char str[500] = "                ";
+
+int str_len = 16;
+
+
+//状态变量
+int Power = 0;
+int Adjust = 0; //0表示当前曲目，1表示下一首，-1表示上一首
+int mute = 0; //1为静音
+int Play = 0; //1为播放
+//音量
+int volume = 40;
+int volume_mute;
+//字符串移位函数
+void RightLoopMove(unsigned char *pStr, int steps)
+{
+    unsigned char arr[100] = { 0 };
+    int n = strlen(pStr) - steps;
+    strcpy(arr, pStr + n);
+    strcpy(arr + steps, pStr);
+    *(arr + strlen(pStr)) = '\0';
+    strcpy(pStr, arr);
+}
+
+void LeftLoopMove(unsigned char *pStr , int steps)
+{
+	unsigned char arr[100] = {0};
+	pStr[str_len] = '\0';
+	strcpy(arr,pStr+steps);
+	strcpy(arr + str_len - steps , pStr);
+	arr[str_len] = '\0 ';
+	strcpy(pStr , arr);
+}
+void IR_Irq_Process()
+{
+	Data_Ready=1;
+	IR_Data=*(pUser_IR);
+}
+
+void sleep( clock_t wait )
+{
+    clock_t goal;
+    goal = wait + clock();
+    while( goal > clock() ) ;
+}
+
+int IR_Irq_Init()
+{
+    int States;
+    States=alt_ic_isr_register(
+    		IR1498_0_IRQ_INTERRUPT_CONTROLLER_ID,   // 中断控制器标号，从system.h复制
+    		IR1498_0_IRQ,                           // 硬件中断号，从system.h复制
+    		IR_Irq_Process,                          // 中断服务子函数
+			NULL,                                    // 指向与设备驱动实例相关的数据结构体
+			0
+						);
+    return States;
+}
+void delay()
+{
+    int i= 10000;
+    while(i--);
+}
+void Display(unsigned char *Song)
+{
+	if(Power == 1)
+	{
+	strcpy(str,space);
+	strcpy(str,Song);
+	str_len = strlen(Song);
+	LCD_Disp(2,0,"                ",16);
+	delay();
+	LCD_Disp(2,0,Song,strlen(Song));
+	}
+}
+
+//音量十进制转字符串
+void trans_numtochar(int volume,unsigned char *str)
+{
+	if(volume == 100)
+	{
+		str[0] = '1';
+		str[1] = '0';
+		str[2] = '0';
+		str[3] = '\0';
+	}
+	if(volume > 9)
+	{
+		str[0] = volume/10 + 48;
+		str[1] = volume%10 + 48;
+		str[2] = '\0';
+	}
+	if(volume <=9)
+	{
+		str[0] = volume + 48;
+		str[1] = '\0';
+	}
+}
+int main()
+{
+  int States;
+  unsigned char Key_Code;
+  unsigned char Last_Key_Code = Key_Code;
+  int Key_ID;
+  States=IR_Irq_Init();
+
+
+  //Song定义
+  unsigned char **Song[50];
+  Song[0] = Song_0;
+  Song[1] = Song_1;
+  Song[2] = Song_2;
+  Song[3] = Song_3;
+  Song[4] = Song_4;
+  Song[5] = Song_5;
+  Song[6] = Song_6;
+  Song[7] = Song_7;
+  Song[8] = Song_8;
+  Song[9] = Song_9;
+  Song[10] = Song_10;
+  Song[11] = Song_11;
+  Song[12] = Song_12;
+
+  //播放状态定义
+  unsigned char **Playing_State[2];
+  Playing_State[0] = LCD_Playing;
+  Playing_State[1] = LCD_Pause;
+  int Song_ID = 1; //标注当前播放曲目的标号
+  int cnt = 0;
+  //七段数码管
+  *pUser_SEG7 = 0xffffffff;
+  unsigned long song_order = 0x01000000,seg_volume = 0x00400000,song_progress = 0x00000000;
+
+  //歌曲进程
+  int start_time;
+  int end_time;
+  while(1)
+  {
+	  delay();
+	if(Power == 1)
+	{
+		if(mute == 1)
+		{
+		   *pUser_SEG7 = song_order|0x00000000|song_progress;
+		}
+		else
+		{
+		   *pUser_SEG7 = song_order|seg_volume|song_progress;
+		}
+
+	  if(!cnt)
+	{
+	  song_progress += 0x00000001;
+	  if(str_len > 16)
+	  {
+		  LeftLoopMove(str,1);
+		  LCD_Disp(2,0,"                ",16);
+		  delay();
+		  LCD_Disp(2,0,str,str_len);
+		  delay();
+		 /* LCD_Disp(1,0,"                ",16);
+		  delay();
+		  LCD_Disp(1,0,LCD_Welcome,16);*/
+	  }
+	  else
+	  {
+		  LCD_Disp(2,0,"                ",16);
+		  delay();
+		  LCD_Disp(2,0,str,str_len);
+		  delay();
+		 /* LCD_Disp(1,0,"                ",16);
+		  delay();
+		  LCD_Disp(1,0,LCD_Welcome,16);*/
+	  }
+	}
+	  cnt = (cnt + 1)%35;
+	}
+	  if(Data_Ready == 1)
+	  {
+		  Data_Ready = 0;
+		  Key_Code = (IR_Data >> 16) & 0xff;
+		  switch(Key_Code)
+		  {
+		  case 0x01:
+		  {
+			  song_order = 0x01000000;
+			  Song_ID = 1;
+			  Key_ID = 1;
+			  Display(Song[1]);
+			  break;
+		  }
+		  case 0x02:
+		  {
+			  song_order = 0x02000000;
+			  Song_ID = 2;
+			  Key_ID = 2;
+			  Display(Song[2]);
+			  break;
+		  }
+		  case 0x03:
+		  {
+			  song_order = 0x03000000;
+			  Song_ID = 3;
+			  Key_ID = 3;
+			  Display(Song[3]);
+			  break;
+		  }
+		  case 0x04:
+		  {
+			  song_order = 0x04000000;
+			  Song_ID = 4;
+			  Key_ID = 4;
+			  Display(Song[4]);
+			  break;
+		  }
+		  case 0x05:
+		  {
+			  song_order = 0x05000000;
+			  Song_ID = 5;
+			  Key_ID = 5;
+			  Display(Song[5]);
+			  break;
+		  }
+		  case 0x06:
+		  {
+			  song_order = 0x06000000;
+			  Song_ID = 6;
+			  Key_ID = 6;
+			  Display(Song[6]);
+			  break;
+		  }
+		  case 0x07:
+		  {
+			  song_order = 0x07000000;
+			  Song_ID = 7;
+			  Key_ID = 7;
+			  Display(Song[7]);
+			  break;
+		  }
+		  case 0x08:
+		  {
+			  song_order = 0x08000000;
+			  Song_ID = 8;
+			  Key_ID = 8;
+			  Display(Song[8]);
+			  break;
+		  }
+		  case 0x09:
+		  {
+			  song_order = 0x09000000;
+			  Song_ID = 9;
+			  Key_ID = 9;
+			  Display(Song[9]);
+			  break;
+		  }
+		  case 0x00:
+		  {
+			  song_order = 0x00000000;
+			  Song_ID = 0;
+			  Key_ID = 0;
+			  Display(Song[0]);
+			  break;
+		  }
+		  case 0x11:
+		  {
+			  Key_ID = 11;
+			  LCD_Disp(2,0,"                ",16);
+			  LCD_Disp(2,0,"11",2);
+			  break;
+		  }
+		  case 0x12:
+		  {
+			  Key_ID = 12;
+			  if(Power == 1)
+			  {
+				  LCD_Disp(1,0,"                ",16);
+				  delay();
+				  LCD_Disp(2,0,"                ",16);
+				  Play = 0;
+				  *pUser_SEG7 = 0xffffffff;
+			  }
+			  else
+			  {
+				  LCD_Disp(1,0,Playing_State[Play+1],strlen(Playing_State[Play+1]));
+				  delay();
+			  }
+			  Power = !Power;
+
+			  break;
+		  }
+		  case 0x1E:
+		  {
+			  Key_ID = 14;
+			  if(Song_ID > 0)
+			  {
+				  Song_ID--;
+				  Display(Song[Song_ID]);
+				  song_order -= 0x01000000;
+				  song_order -=(((song_order&0x0f000000)==0x0f000000)?(0x06000000):(0x00000000));
+			  }
+			  break;
+		  }
+		  case 0x1A:
+		  {
+			  Key_ID = 18;
+			  if(Song_ID < 12)
+			  {
+				  Song_ID++;
+				  Display(Song[Song_ID]);
+				  song_order += 0x01000000;
+				  song_order +=(((song_order&0x0f000000)==0x0a000000)?(0x06000000):(0x00000000));
+			  }
+			  break;
+		  }
+		  case 0x1B:
+		  {
+			  if(volume < 100)
+			  {
+				 mute = 0;
+				 volume++;
+				 seg_volume += 0x00010000;
+				 seg_volume+=(((seg_volume&0x000f0000)==0x000a0000)?(0x00060000):(0x00000000));
+
+			  }
+			/*  unsigned char str_tmp[4] = {""};
+			  trans_numtochar(volume,str_tmp);
+			  LCD_Disp(1,14,str_tmp,strlen(str_tmp));
+			  delay();*/
+			  break;
+		  }
+		  case 0x1F:
+		  {
+			  if(volume > 0)
+			  {
+				  mute = 0;
+				  volume--;
+				  seg_volume -= 0x00010000;
+				  seg_volume -=(((seg_volume&0x000f0000) == 0x000f0000)?(0x00060000):(0x00000000));
+
+			  }
+
+			  break;
+		  }
+		  case 0x0C:
+		  {
+			  if(mute == 0)
+			  {
+				  volume_mute = volume;
+			  }
+			  else
+			  {
+				  volume = volume_mute;
+			  }
+			  mute = !mute;
+			  break;
+		  }
+		  case 0x16:
+		  {
+			  if(Play == 0)
+			  {
+				  Display(Song[Song_ID]);
+			  }
+			  Play = ~Play;
+
+			  break;
+		  }
+		  default:
+		  {
+			  LCD_Disp(2,0,"                ",16);
+			  LCD_Disp(2,0,"CNM",3);
+			  break;
+		  }
+		  }
+
+	}
+	  if(Power == 1)
+	  {
+	  if(!cnt)
+	  {
+		 LCD_Disp(1,0,"                ",16);
+		 delay();
+		 LCD_Disp(1,0,Playing_State[Play+1],strlen(Playing_State[Play+1]));
+		 delay();
+
+	  }
+	  delay();
+	  }
+
+  }
+
+  return 0;
+}
